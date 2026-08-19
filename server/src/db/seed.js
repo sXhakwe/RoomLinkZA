@@ -1,0 +1,34 @@
+import bcrypt from 'bcryptjs';
+import {pool} from './pool.js';
+
+const password=await bcrypt.hash('Password123!',12);
+async function member(email,first,last,city,province,occupation,bio){return (await pool.query(`INSERT INTO users(email,password_hash,first_name,last_name,city,province,occupation,is_verified,bio) VALUES($1,$2,$3,$4,$5,$6,$7,true,$8) ON CONFLICT(email) DO UPDATE SET first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,city=EXCLUDED.city,province=EXCLUDED.province,occupation=EXCLUDED.occupation,bio=EXCLUDED.bio RETURNING id`,[email,password,first,last,city,province,occupation,bio])).rows[0];}
+try{
+ await pool.query(`INSERT INTO users(email,password_hash,first_name,last_name,city,province,role,is_verified,bio) VALUES('admin@roomlink.co.za',$1,'Lerato','Mokoena','Johannesburg','Gauteng','admin',true,'RoomLink community administrator') ON CONFLICT(email) DO UPDATE SET role='admin'`,[password]);
+ const ayanda=await member('ayanda@example.com','Ayanda','Dlamini','Cape Town','Western Cape','Graduate designer','Easy-going creative who loves good food, calm mornings and a tidy shared space.');
+ const thabo=await member('thabo@example.com','Thabo','Nkosi','Johannesburg','Gauteng','Software developer','Tidy, sociable and usually working from home. Always up for a weekend braai.');
+ const naledi=await member('naledi@example.com','Naledi','Molefe','Pretoria','Gauteng','Postgraduate student','Quiet during the week, outdoorsy on weekends and looking for a respectful home.');
+ const sipho=await member('sipho@example.com','Sipho','Mthembu','Durban','KwaZulu-Natal','Junior architect','Friendly early bird who enjoys running, design and cooking for friends.');
+ const zoe=await member('zoe@example.com','Zoë','Jacobs','Stellenbosch','Western Cape','Research assistant','Book lover, plant parent and considerate flatmate looking near central Stellenbosch.');
+ const prefs=[
+  [ayanda.id,4500,8000,'Cape Town','Western Cape',4,4,'early_bird',true,['hiking','music','cooking']],
+  [thabo.id,5000,9500,'Johannesburg','Gauteng',4,3,'night_owl',false,['football','tech','cooking']],
+  [naledi.id,3500,6500,'Pretoria','Gauteng',5,2,'early_bird',false,['reading','hiking','fitness']],
+  [sipho.id,4500,7500,'Durban','KwaZulu-Natal',4,4,'early_bird',true,['running','design','food']],
+  [zoe.id,4000,7000,'Stellenbosch','Western Cape',5,3,'night_owl',true,['books','plants','art']]
+ ];
+ for(const p of prefs)await pool.query(`INSERT INTO roommate_preferences(user_id,budget_min,budget_max,preferred_city,preferred_province,cleanliness,social_level,sleep_schedule,pets_ok,interests) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id) DO UPDATE SET budget_min=EXCLUDED.budget_min,budget_max=EXCLUDED.budget_max,preferred_city=EXCLUDED.preferred_city,preferred_province=EXCLUDED.preferred_province,cleanliness=EXCLUDED.cleanliness,social_level=EXCLUDED.social_level,sleep_schedule=EXCLUDED.sleep_schedule,pets_ok=EXCLUDED.pets_ok,interests=EXCLUDED.interests`,p);
+ if(!(await pool.query('SELECT 1 FROM listings LIMIT 1')).rowCount)await pool.query(`INSERT INTO listings(owner_id,title,description,property_type,room_type,address_line,suburb,city,province,postal_code,monthly_rent,deposit,available_from,bedrooms,bathrooms,furnished,utilities_included,amenities,image_urls,house_rules) VALUES
+ ($1,'Sunny room in Observatory','Bright furnished room in a friendly two-bedroom apartment near shops, Jammie Shuttle routes and the station.','Apartment','Private room','12 Lower Main Road','Observatory','Cape Town','Western Cape','7925',6500,6500,current_date+7,2,1,true,true,ARRAY['Wi-Fi','Parking','Balcony'],ARRAY['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80'],'No indoor smoking. Shared cleaning rota.'),
+ ($2,'Modern Rosebank apartment share','Secure apartment with a private bedroom, shared lounge and excellent access to the Gautrain.','Apartment','Private room','34 Tyrwhitt Avenue','Rosebank','Johannesburg','Gauteng','2196',7800,7800,current_date+14,2,2,true,false,ARRAY['Security','Gym','Wi-Fi'],ARRAY['https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=1200&q=80'],'Quiet after 22:00 on weekdays.')`,[ayanda.id,thabo.id]);
+ if(!(await pool.query('SELECT 1 FROM posts LIMIT 1')).rowCount)await pool.query(`INSERT INTO posts(author_id,body) VALUES
+ ($1,'Hello RoomLink! I am looking for a relaxed roommate around Observatory from next month. I enjoy cooking, live music and quiet weeknights. Anyone keen to connect?'),
+ ($2,'Rental tip: agree on a cleaning schedule and shared costs before move-in. A 15-minute house chat can save months of stress.'),
+ ($3,'Does anyone know which parts of Pretoria have reliable public transport to Hatfield? I would love advice from people who live nearby.'),
+ ($4,'Weekend idea for new housemates: visit a local market together before move-in. It is an easy way to talk budgets, routines and shared tastes.'),
+ ($5,'Moving checklist: photograph the room on arrival, record meter readings, and keep your signed lease somewhere both housemates can access.')`,[ayanda.id,thabo.id,naledi.id,sipho.id,zoe.id]);
+ if(!(await pool.query('SELECT 1 FROM connections LIMIT 1')).rowCount)await pool.query(`INSERT INTO connections(requester_id,recipient_id,status) VALUES($1,$2,'accepted'),($3,$1,'pending')`,[ayanda.id,thabo.id,naledi.id]);
+ if(!(await pool.query('SELECT 1 FROM events LIMIT 1')).rowCount)await pool.query(`INSERT INTO events(creator_id,title,category,description,event_date,event_time,location,max_attendees) VALUES($1,'New Roommates Coffee Meetup','Social','A relaxed meetup for people looking for housemates and local advice.',current_date+10,'11:00','Rosebank, Johannesburg',20),($2,'Community Games Night','Game Night','Bring a favourite game and meet the RoomLink community.',current_date-14,'18:30','Observatory, Cape Town',16)`,[thabo.id,ayanda.id]);
+ if(!(await pool.query('SELECT 1 FROM households LIMIT 1')).rowCount){const h=(await pool.query(`INSERT INTO households(name,created_by) VALUES('Ayanda & Thabo’s home',$1) RETURNING id`,[ayanda.id])).rows[0];await pool.query('INSERT INTO household_members(household_id,user_id) VALUES($1,$2),($1,$3)',[h.id,ayanda.id,thabo.id]);await pool.query(`INSERT INTO chores(household_id,creator_id,title,assignee_id,due_date,status) VALUES($1,$2,'Clean the kitchen',$3,current_date+2,'open'),($1,$2,'Take out recycling',$2,current_date,'complete')`,[h.id,ayanda.id,thabo.id]);const bill=(await pool.query(`INSERT INTO bills(household_id,creator_id,title,amount,due_date) VALUES($1,$2,'Fibre Wi-Fi',799,current_date+7) RETURNING id`,[h.id,ayanda.id])).rows[0];await pool.query('INSERT INTO bill_shares(bill_id,user_id,amount) VALUES($1,$2,399.50),($1,$3,399.50)',[bill.id,ayanda.id,thabo.id]);}
+ console.log('Seed complete. Demo password for all accounts: Password123!');
+}finally{await pool.end();}
